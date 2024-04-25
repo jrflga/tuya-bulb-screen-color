@@ -24,7 +24,7 @@ extern crate pretty_env_logger;
 
 #[derive(Eq, PartialEq, Hash)]
 enum DataPointsKey {
-    // SwitchLed = 20,
+    SwitchLed = 20,
     ColorMode = 21,
     Color = 24,
 }
@@ -32,7 +32,7 @@ enum DataPointsKey {
 impl DataPointsKey {
     fn get(&self) -> String {
         match self {
-            // DataPointsKey::SwitchLed => "20".to_string(),
+            DataPointsKey::SwitchLed => "20".to_string(),
             DataPointsKey::ColorMode => "21".to_string(),
             DataPointsKey::Color => "24".to_string(),
         }
@@ -43,7 +43,8 @@ impl DataPointsKey {
 #[serde(rename_all = "kebab-case")]
 enum Feature {
     #[default]
-    SwitchLed,
+    SwitchLedOn,
+    SwitchLedOff,
     ColorPicker,
     WhiteMode,
     ColorMode
@@ -83,8 +84,13 @@ fn main() {
     let device = connect(args.key, args.ip);
 
     match args.mode {
-        Feature::SwitchLed => {
-            error!("Not implemented yet");
+        Feature::SwitchLedOn => {
+            info!("Turning on the LED...");
+            switch_led(device, args.id.clone(), true);
+        }
+        Feature::SwitchLedOff => {
+            info!("Turning off the LED...");
+            switch_led(device, args.id.clone(), false);
         }
         Feature::ColorPicker => {
             info!("Starting to see color on the screen...");
@@ -98,6 +104,15 @@ fn main() {
             info!("Changing mode to white");
             color_mode(device, args.id.clone(), "white".to_string());
         }
+    }
+}
+
+fn switch_led(device: Result<TuyaDevice, ErrorKind>, device_id: String, mode: bool) {
+    if let Ok(device) = device {
+        let payload = create_switch_led_payload(device_id.clone(), mode);
+        let _ = device.set(payload, 0);
+    } else {
+        error!("Failed to connect to the device.");
     }
 }
 
@@ -249,6 +264,25 @@ fn get_dominant_color(img: &RgbaImage) -> Rgb {
         dominant_color.g as f32,
         dominant_color.b as f32,
     )
+}
+
+fn create_switch_led_payload(id: String, mode: bool) -> Payload {
+    let mut dps = HashMap::new();
+    dps.insert(DataPointsKey::SwitchLed.get(), json!(mode));
+
+    let current_time = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as u32;
+
+    Payload::Struct(PayloadStruct {
+        dev_id: id.to_string(),
+        gw_id: Some(id.to_string()),
+        uid: None,
+        t: Some(current_time),
+        dp_id: None,
+        dps: Some(dps),
+    })
 }
 
 fn create_color_picker_payload(id: String, hsl: Hsl) -> Payload {
